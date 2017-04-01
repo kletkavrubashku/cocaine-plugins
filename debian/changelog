@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.12.8) unstable; urgency=low
+
+  * Fixed: prevent concurrent access to the stdout keeper in Node service.
+
+ -- Evgeny Safronov <division494@gmail.com>  Sat, 01 Apr 2017 20:51:41 +0300
+
 cocaine-plugins (0.12.12.7) unstable; urgency=low
 
   * Fixed: drop expired events properly.
