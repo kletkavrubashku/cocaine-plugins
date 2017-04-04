@@ -1,3 +1,10 @@
+cocaine-plugins (0.12.12.9) unstable; urgency=low
+
+  * Fixed: really prevent concurrent access to the stdout keeper in
+    Node service.
+
+ -- Evgeny Safronov <division494@gmail.com>  Tue, 04 Apr 2017 15:42:03 +0300
+
 cocaine-plugins (0.12.12.8) unstable; urgency=low
 
   * Fixed: prevent concurrent access to the stdout keeper in Node service.
