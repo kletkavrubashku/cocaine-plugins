@@ -52,47 +52,56 @@ private:
 };
 
 class safe_stream_t {
-    bool closed;
-    boost::optional<upstream<app_tag>> stream;
+    boost::optional<upstream<app_tag>> stream_;
+    std::atomic_bool started_{false};
+    std::atomic_bool closed_{false};
 
 public:
     using protocol = io::protocol<app_tag>::scope;
 
-    safe_stream_t(upstream<app_tag> stream) :
-        closed(false),
-        stream(std::move(stream))
-    {}
+    safe_stream_t() = default;
 
-    safe_stream_t() :
-        closed(false),
-        stream()
+    safe_stream_t(upstream<app_tag>&& stream)
+        : stream_(std::move(stream))
     {}
 
     operator bool() {
-        return stream.is_initialized();
+        return stream_.is_initialized();
+    }
+
+    auto operator=(safe_stream_t&& that) -> safe_stream_t& {
+        stream_ = std::move(that.stream_);
+        started_ = that.started_.load();
+        closed_ = that.closed_.load();
+        return *this;
+    }
+
+    auto started() const -> bool {
+        return started_;
     }
 
     auto chunk(const hpack::headers_t& headers, std::string data) -> bool {
-        if(!closed && stream) {
-            stream = stream->send<protocol::chunk>(headers, std::move(data));
+        if(!closed_ && stream_) {
+            started_ = true;
+            stream_ = stream_->send<protocol::chunk>(headers, std::move(data));
             return true;
         }
         return false;
     }
 
     auto close(const hpack::headers_t& headers) -> bool {
-        if(!closed && stream) {
-            stream->send<protocol::choke>(headers);
-            closed = true;
+        if(!closed_.exchange(true) && stream_) {
+            started_ = true;
+            stream_->send<protocol::choke>(headers);
             return true;
         }
         return false;
     }
 
     auto error(const hpack::headers_t& headers, std::error_code ec, std::string msg) -> bool {
-        if(!closed && stream) {
-            stream->send<protocol::error>(headers, std::move(ec), std::move(msg));
-            closed = true;
+        if(!closed_.exchange(true) && stream_) {
+            started_ = true;
+            stream_->send<protocol::error>(headers, std::move(ec), std::move(msg));
             return true;
         }
         return false;
@@ -138,7 +147,6 @@ class vicodyn_dispatch_t : public std::enable_shared_from_this<vicodyn_dispatch_
     discardable<app_tag> backward_dispatch;
 
     safe_stream_t backward_stream;
-    bool backward_stream_chunk_sent = false;
 
     synchronized<void> mutex;
 
@@ -269,29 +277,34 @@ public:
 private:
     auto on_forward_chunk(const hpack::headers_t& headers, std::string chunk) -> void {
         COCAINE_LOG_DEBUG(endpoint.logger, "processing chunk");
-        buffer.chunks.push_back(std::move(chunk));
-        buffer.chunk_headers.push_back(headers);
+        if (!backward_stream.started()) {
+            buffer.chunks.push_back(std::move(chunk));
+            buffer.chunk_headers.push_back(headers);
+        }
         endpoint.forward_stream.chunk(headers, buffer.chunks.back());
         request_context->add_checkpoint("after_fchunk");
     }
 
     auto on_forward_choke(const hpack::headers_t& headers) -> void {
         COCAINE_LOG_DEBUG(endpoint.logger, "processing choke");
-        buffer.choke = headers;
+        if (!backward_stream.started()) {
+            buffer.choke = headers;
+        }
         endpoint.forward_stream.close(headers);
         request_context->add_checkpoint("after_fchoke");
     }
 
     auto on_forward_error(const hpack::headers_t& headers, const std::error_code& ec, const std::string& msg) -> void {
         COCAINE_LOG_INFO(endpoint.logger, "processing error");
-        buffer.error = {headers, ec, msg};
+        if (!backward_stream.started()) {
+            buffer.error = {headers, ec, msg};
+        }
         endpoint.forward_stream.error(headers, ec, msg);
         request_context->add_checkpoint("after_ferror");
     }
 
     auto on_backward_chunk(const hpack::headers_t& headers, std::string chunk) -> void {
         try {
-            backward_stream_chunk_sent = true;
             backward_stream.chunk(headers, std::move(chunk));
             request_context->add_checkpoint("after_bchunk");
         } catch (const std::system_error& e) {
@@ -389,7 +402,7 @@ private:
     auto retry_unsafe() -> void {
         COCAINE_LOG_INFO(endpoint.logger, "retrying");
         request_context->register_retry();
-        if(backward_stream_chunk_sent) {
+        if(backward_stream.started()) {
             throw error_t("retry is forbidden - response chunk was sent");
         }
         if(request_context->retry_count() > proxy.balancer->retry_count()) {
@@ -402,7 +415,7 @@ private:
                         blackhole::attributes_t{{"peer", endpoint.peer->uuid()}});
         auto u = endpoint.peer->open_stream<io::node::enqueue>(shared_backward_dispatch(), event.headers,
                         proxy.app_name, event.frame);
-        endpoint.forward_stream = safe_stream_t(std::move(u));
+        endpoint.forward_stream = std::move(safe_stream_t(std::move(u)));
         for(size_t i = 0; i < buffer.chunks.size(); i++) {
             endpoint.forward_stream.chunk(buffer.chunk_headers[i], buffer.chunks[i]);
         }
