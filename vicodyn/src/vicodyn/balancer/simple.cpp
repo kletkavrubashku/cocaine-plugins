@@ -1,5 +1,4 @@
 #include "cocaine/vicodyn/balancer/simple.hpp"
-#include "cocaine/vicodyn/balancer/utils.hpp"
 
 #include <cocaine/context.hpp>
 #include <cocaine/format/peer.hpp>
@@ -24,43 +23,20 @@ simple_t::simple_t(context_t& ctx, peers_t& peers, asio::io_service& loop, const
 }
 
 auto simple_t::choose_peer(const std::shared_ptr<request_context_t>& request_context,
-        const hpack::headers_t& /*headers*/, const std::string& /*event*/) -> std::shared_ptr<cocaine::vicodyn::peer_t>
-{
-    return peers.apply_shared([&](const peers_t::data_t& mapping) {
-        auto apps_it = mapping.apps.find(app_name);
-        if(apps_it == mapping.apps.end() || apps_it->second.empty()) {
-            COCAINE_LOG_WARNING(logger, "peer list for app {} is empty", app_name);
-            throw error_t("no peers found");
-        }
-        auto& apps = apps_it->second;
-        std::vector<peers_t::peers_data_t::const_iterator> chosen;
-        chosen.reserve(apps.size());
-        for (const auto& app_it : apps) {
-            if (request_context->peer_use_count(app_it.first)) {
-                continue;
-            }
-            if (app_it.second.banned()) {
-                continue;
-            }
-            auto peer_it = mapping.peers.find(app_it.first);
-            if (peer_it == mapping.peers.end()) {
-                continue;
-            }
-            if (!peer_it->second->connected()) {
-                continue;
-            }
-            if (peer_it->second->x_cocaine_cluster() != x_cocaine_cluster) {
-                continue;
-            }
-            chosen.push_back(peer_it);
-        }
-        auto it = choose_random(chosen.begin(), chosen.end());
-        if (it != chosen.end()) {
-            return (*it)->second;
-        }
-        COCAINE_LOG_WARNING(logger, "all peers do not have desired app");
+                const hpack::headers_t& /*headers*/, const std::string& /*event*/) -> std::shared_ptr<peer_t> {
+    auto peer_predicate = [&](const peer_t& peer) {
+        return  peer.connected() &&
+                peer.x_cocaine_cluster() == x_cocaine_cluster &&
+                !request_context->peer_use_count(peer.uuid());
+    };
+    auto app_service_predicate = [&](const peers_t::app_service_t& app_service) {
+        return !app_service.banned();
+    };
+    auto peer = peers.choose_random(app_name, peer_predicate, app_service_predicate);
+    if (!peer) {
         throw error_t("no peers found");
-    });
+    }
+    return peer;
 }
 
 auto simple_t::retry_count() -> size_t {

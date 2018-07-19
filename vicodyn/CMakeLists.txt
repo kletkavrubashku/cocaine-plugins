@@ -8,7 +8,6 @@ ADD_LIBRARY(vicodyn SHARED
         src/module.cpp
         src/vicodyn/request_context.cpp
         src/vicodyn/balancer/simple.cpp
-        src/vicodyn/balancer/utils.cpp
         src/vicodyn/proxy.cpp
         src/vicodyn/peer.cpp
         src/vicodyn/error.cpp

@@ -101,6 +101,8 @@ public:
         auto average_elapsed() const -> clock_t::duration;
     };
 
+    using app_service_f = std::function<bool(const app_service_t& app_service)>;
+    using peer_f = std::function<bool(const peer_t& peer_service)>;
     using endpoints_t = std::vector<asio::ip::tcp::endpoint>;
     // peer_uuid -> peer_ptr
     using peers_data_t = std::unordered_map<std::string, std::shared_ptr<peer_t>>;
@@ -158,6 +160,11 @@ public:
     auto erase(const std::string& uuid) -> void;
 
     auto peer(const std::string& uuid) -> std::shared_ptr<peer_t>;
+
+    auto choose_random(const std::string& app_name, peer_f peer_predicate, app_service_f app_service_predicate) const
+                    -> std::shared_ptr<peer_t>;
+    auto choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
+                    peer_f peer_predicate, app_service_f app_service_predicate) const -> std::shared_ptr<peer_t>;
 };
 
 } // namespace vicodyn
