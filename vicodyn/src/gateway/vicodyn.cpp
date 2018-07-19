@@ -102,7 +102,7 @@ vicodyn_t::vicodyn_t(context_t& _context, const std::string& _local_uuid, const 
     context(_context),
     locator_extra(locator_extra),
     wrapped_gateway(),
-    peers(context),
+    peers(context, args),
     args(args),
     local_uuid(_local_uuid),
     logger(context.log(format("gateway/{}", name)))

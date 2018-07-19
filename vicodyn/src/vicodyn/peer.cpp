@@ -177,10 +177,12 @@ auto peer_t::x_cocaine_cluster() const -> const std::string& {
     return d_.x_cocaine_cluster;
 }
 
-peers_t::peers_t(context_t& context):
-    context(context),
-    logger(context.log("vicodyn/peers_t"))
-{}
+peers_t::peers_t(context_t& context, const dynamic_t& args)
+    : context(context)
+    , logger(context.log("vicodyn/peers_t")) {
+    auto timings_ms = args.as_object().at("timings-window-ms", 30000U).as_uint();
+    timings_window = std::chrono::duration_cast<clock_t::duration>(std::chrono::milliseconds(timings_ms));
+}
 
 auto peers_t::register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra)
     -> std::shared_ptr<peer_t>
@@ -214,7 +216,7 @@ auto peers_t::erase_peer(const std::string& uuid) -> void {
 
 auto peers_t::register_app(const std::string& uuid, const std::string& name) -> void {
     apply([&](data_t& data) {
-        data.apps[name][uuid];
+        data.apps[name].emplace(uuid, app_service_t(timings_window));
     });
 }
 
@@ -224,7 +226,8 @@ auto peers_t::erase_app(const std::string& uuid, const std::string& name) -> voi
     });
 }
 
-auto peers_t::ban_app(const std::string& uuid, const std::string& name, const std::chrono::milliseconds& timeout) -> void {
+auto peers_t::ban_app(const std::string& uuid, const std::string& name, const std::chrono::milliseconds& timeout)
+                -> void {
     apply([&](data_t& data) {
         auto apps_it = data.apps.find(name);
         if(apps_it ==  std::end(data.apps)) {
@@ -238,11 +241,26 @@ auto peers_t::ban_app(const std::string& uuid, const std::string& name, const st
     });
 }
 
+auto peers_t::add_app_request_timing(const std::string& uuid, const std::string& name, clock_t::time_point start,
+                clock_t::duration elapsed) -> void {
+    apply([&](data_t& data) {
+        auto apps_it = data.apps.find(name);
+        if(apps_it ==  std::end(data.apps)) {
+            return;
+        }
+        auto app_service_it = apps_it->second.find(uuid);
+        if (app_service_it == std::end(apps_it->second)) {
+            return;
+        }
+        app_service_it->second.add_request_timing(start, elapsed);
+    });
+}
+
 auto peers_t::erase(const std::string& uuid) -> void {
     erase_peer(uuid);
     apply([&](data_t& data) {
         data.peers.erase(uuid);
-        for (auto pair : data.apps) {
+        for (auto& pair : data.apps) {
             pair.second.erase(uuid);
         }
     });
@@ -258,7 +276,10 @@ auto peers_t::peer(const std::string& uuid) -> std::shared_ptr<peer_t> {
     });
 }
 
-auto peers_t::app_service_t::ban(const std::chrono::milliseconds& timeout) -> void {
+peers_t::app_service_t::app_service_t(clock_t::duration timings_window)
+    : timings_ewma_(new metrics::usts::ewma<clock_t >(timings_window)) {}
+
+auto peers_t::app_service_t::ban(std::chrono::milliseconds timeout) -> void {
     if (timeout.count() > 0) {
         ban_until_ = clock_t::now() + timeout;
     }
@@ -266,6 +287,14 @@ auto peers_t::app_service_t::ban(const std::chrono::milliseconds& timeout) -> vo
 
 auto peers_t::app_service_t::banned() const -> bool {
     return ban_until_ > clock_t::now();
+}
+
+auto peers_t::app_service_t::add_request_timing(clock_t::time_point start, clock_t::duration elapsed) -> void {
+    timings_ewma_->add(start, elapsed.count());
+}
+
+auto peers_t::app_service_t::average_elapsed() const -> clock_t::duration {
+    return clock_t::duration(static_cast<clock_t::duration::rep>(timings_ewma_->get()));
 }
 
 } // namespace vicodyn

@@ -8,6 +8,7 @@
 #include <cocaine/logging.hpp>
 #include <cocaine/rpc/session.hpp>
 #include <cocaine/rpc/upstream.hpp>
+#include <metrics/usts/ewma.hpp>
 
 #include <asio/ip/tcp.hpp>
 
@@ -82,15 +83,22 @@ private:
 // thread safe wrapper on map of peers indexed by uuid
 class peers_t {
 public:
-    class app_service_t {
-        using clock_t = std::chrono::steady_clock;
+    using clock_t = std::chrono::steady_clock;
 
+    class app_service_t {
         clock_t::time_point ban_until_;
+        std::unique_ptr<metrics::usts::ewma<clock_t>> timings_ewma_;
 
     public:
-        auto ban(const std::chrono::milliseconds& timeout) -> void;
+        app_service_t(clock_t::duration timings_window);
+
+        auto ban(std::chrono::milliseconds timeout) -> void;
 
         auto banned() const -> bool;
+
+        auto add_request_timing(clock_t::time_point start, clock_t::duration elapsed) -> void;
+
+        auto average_elapsed() const -> clock_t::duration;
     };
 
     using endpoints_t = std::vector<asio::ip::tcp::endpoint>;
@@ -112,6 +120,7 @@ private:
     std::unique_ptr<logging::logger_t> logger;
     executor::owning_asio_t executor;
     data_t data;
+    clock_t::duration timings_window;
     mutable boost::shared_mutex mutex;
 
 
@@ -129,7 +138,7 @@ public:
     }
 
 
-    peers_t(context_t& context);
+    peers_t(context_t& context, const dynamic_t& args);
 
     auto register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra) -> std::shared_ptr<peer_t>;
 
@@ -137,11 +146,14 @@ public:
 
     auto erase_peer(const std::string& uuid) -> void;
 
-    auto register_app( const std::string& uuid, const std::string& name) -> void;
+    auto register_app(const std::string& uuid, const std::string& name) -> void;
 
     auto erase_app(const std::string& uuid, const std::string& name) -> void;
 
     auto ban_app(const std::string& uuid, const std::string& name, const std::chrono::milliseconds& timeout) -> void;
+
+    auto add_app_request_timing(const std::string& uuid, const std::string& name, clock_t::time_point start,
+                    clock_t::duration elapsed) -> void;
 
     auto erase(const std::string& uuid) -> void;
 
