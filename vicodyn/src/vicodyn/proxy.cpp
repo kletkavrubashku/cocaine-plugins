@@ -112,11 +112,6 @@ class vicodyn_dispatch_t : public std::enable_shared_from_this<vicodyn_dispatch_
     using protocol = io::protocol<app_tag>::scope;
     using clock_t = peers_t::clock_t;
 
-    struct event_t {
-        std::string frame;
-        hpack::headers_t headers;
-    };
-
     struct error_buffer_t {
         hpack::headers_t headers;
         std::error_code ec;
@@ -124,6 +119,9 @@ class vicodyn_dispatch_t : public std::enable_shared_from_this<vicodyn_dispatch_
     };
 
     struct buffer_t {
+        std::string event;
+        hpack::headers_t headers;
+
         std::vector<std::string> chunks;
         std::vector<hpack::headers_t> chunk_headers;
 
@@ -140,7 +138,6 @@ class vicodyn_dispatch_t : public std::enable_shared_from_this<vicodyn_dispatch_
 
     proxy_t& proxy;
 
-    event_t event;
     buffer_t buffer;
     std::shared_ptr<request_context_t> request_context;
     endpoint_t endpoint;
@@ -279,6 +276,8 @@ public:
 private:
     auto on_forward_chunk(const hpack::headers_t& headers, std::string chunk) -> void {
         COCAINE_LOG_DEBUG(endpoint.logger, "processing chunk");
+        // For this place and below: we don't need to store and use cache if we have started
+        // reply to backward stream
         if (!backward_stream.started()) {
             buffer.chunks.push_back(std::move(chunk));
             buffer.chunk_headers.push_back(headers);
@@ -373,19 +372,19 @@ private:
     }
 
     auto choose_endpoint() -> void {
-        endpoint.peer = proxy.balancer->choose_peer(request_context, event.headers, event.frame);
+        endpoint.peer = proxy.balancer->choose_peer(request_context, buffer.headers, buffer.event);
         request_context->mark_used_peer(endpoint.peer);
         endpoint.logger = std::make_unique<blackhole::wrapper_t>(*proxy.logger,
                         blackhole::attributes_t{{"peer", endpoint.peer->uuid()}});
         endpoint.start_time = clock_t::now();
-        auto u = endpoint.peer->open_stream<io::node::enqueue>(shared_backward_dispatch(),event.headers, proxy.app_name,
-                        event.frame);
+        auto u = endpoint.peer->open_stream<io::node::enqueue>(shared_backward_dispatch(), buffer.headers,
+                        proxy.app_name, buffer.event);
         endpoint.forward_stream = safe_stream_t(std::move(u));
     }
 
-    auto enqueue_unsafe(hpack::headers_t headers, std::string frame) -> std::shared_ptr<dispatch<app_tag>> {
-        event.frame = std::move(frame);
-        event.headers = std::move(headers);
+    auto enqueue_unsafe(hpack::headers_t headers, std::string event) -> std::shared_ptr<dispatch<app_tag>> {
+        buffer.event = std::move(event);
+        buffer.headers = std::move(headers);
 
         COCAINE_LOG_DEBUG(endpoint.logger, "processing enqueue");
         try {
@@ -421,6 +420,7 @@ private:
 
         choose_endpoint();
 
+        // Forward all stored at the moment buffer. Other parts will be forwarded by callbacks.
         for(size_t i = 0; i < buffer.chunks.size(); i++) {
             endpoint.forward_stream.chunk(buffer.chunk_headers[i], buffer.chunks[i]);
         }
