@@ -330,41 +330,34 @@ auto peers_t::app_service_t::average_elapsed_ns() const -> double {
     return timings_ewma_->get();
 }
 
-auto peers_t::choose_random(const std::string& app_name, peer_predicate_t peer_predicate,
-                app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t> {
-    return apply_shared([&](const data_t& data) -> std::shared_ptr<peer_t> {
-        auto apps_it = data.apps.find(app_name);
-        if (apps_it == data.apps.end() || apps_it->second.empty()) {
-            COCAINE_LOG_WARNING(logger, "peer list for app \"{}\" is empty", app_name);
-            return {};
+auto peers_t::choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
+                const app_predicate_t& app_predicate) const -> std::shared_ptr<peer_t> {
+    auto enumerator = [&](const app_services_t& apps, const app_handler_t& handler) {
+        for (const auto& app_service : apps) {
+            handler(app_service.first, app_service.second);
         }
-        const auto& app_services = apps_it->second;
-
-        weighted_distribution<peers_data_t::const_iterator> distribution(app_services.size());
-        for (const auto& app_service : app_services) {
-            if (!app_service_predicate(app_service.second)) {
-                continue;
-            }
-            auto peer_it = data.peers.find(app_service.first);
-            if (peer_it == data.peers.end()) {
-                continue;
-            }
-            if (!peer_predicate(*peer_it->second)) {
-                continue;
-            }
-            auto positive_duration_ns = std::max(app_service.second.average_elapsed_ns(), 1.);
-            distribution.add(peer_it, 1. / positive_duration_ns);
-        }
-        auto chosen = distribution.random();
-        if (!chosen) {
-            return {};
-        }
-        return chosen.get()->second;
-    });
+    };
+    return choose_random(enumerator, app_name, peer_predicate, app_predicate);
 }
 
 auto peers_t::choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
-                peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t> {
+                const peer_predicate_t& peer_predicate, const app_predicate_t& app_predicate) const
+                -> std::shared_ptr<peer_t> {
+    auto enumerator = [&](const app_services_t& apps, const app_handler_t& handler) {
+        for (const std::string& uuid : uuids) {
+            auto app_service_it = apps.find(uuid);
+            if (app_service_it == apps.end()) {
+                continue;
+            }
+            handler(uuid, app_service_it->second);
+        }
+    };
+    return choose_random(enumerator, app_name, peer_predicate, app_predicate);
+}
+
+auto peers_t::choose_random(const app_enumerator_t& app_enumerator, const std::string& app_name,
+                const peer_predicate_t& peer_predicate, const app_predicate_t& app_predicate) const
+                -> std::shared_ptr<peer_t> {
     return apply_shared([&](const data_t& data) -> std::shared_ptr<peer_t> {
         auto apps_it = data.apps.find(app_name);
         if (apps_it == data.apps.end() || apps_it->second.empty()) {
@@ -373,25 +366,22 @@ auto peers_t::choose_random(const std::vector<std::string>& uuids, const std::st
         }
         const auto& app_services = apps_it->second;
 
-        weighted_distribution<peers_data_t::const_iterator> distribution(uuids.size());
-        for (const std::string& uuid : uuids) {
-            auto app_service_it = app_services.find(uuid);
-            if (app_service_it == app_services.end()) {
-                continue;
-            }
-            if (!app_service_predicate(app_service_it->second)) {
-                continue;
+        // Choose peer according average elapsed time per request
+        weighted_distribution<peers_data_t::const_iterator> distribution(app_services.size());
+        app_enumerator(app_services, [&](const std::string& uuid, const app_service_t& app_service) {
+            if (!app_predicate(app_service)) {
+                return;
             }
             auto peer_it = data.peers.find(uuid);
             if (peer_it == data.peers.end()) {
-                continue;
+                return;
             }
             if (!peer_predicate(*peer_it->second)) {
-                continue;
+                return;
             }
-            auto positive_duration_ns = std::max(app_service_it->second.average_elapsed_ns(), 1.);
+            auto positive_duration_ns = std::max(app_service.average_elapsed_ns(), 1.);
             distribution.add(peer_it, 1. / positive_duration_ns);
-        }
+        });
         auto chosen = distribution.random();
         if (!chosen) {
             return {};

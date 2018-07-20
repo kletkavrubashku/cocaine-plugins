@@ -118,6 +118,9 @@ public:
 
 
 private:
+    using app_handler_t = std::function<void(const std::string& uuid, const app_service_t& app_service)>;
+    using app_enumerator_t = std::function<void(const app_services_t& apps, const app_handler_t& handler)>;
+
     context_t& context;
     std::unique_ptr<logging::logger_t> logger;
     executor::owning_asio_t executor;
@@ -142,7 +145,8 @@ public:
 
     peers_t(context_t& context, const dynamic_t& args);
 
-    auto register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra) -> std::shared_ptr<peer_t>;
+    auto register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra)
+                    -> std::shared_ptr<peer_t>;
 
     auto register_peer(const std::string& uuid, std::shared_ptr<peer_t> peer) -> void;
 
@@ -161,10 +165,17 @@ public:
 
     auto peer(const std::string& uuid) -> std::shared_ptr<peer_t>;
 
-    auto choose_random(const std::string& app_name, peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const
-                    -> std::shared_ptr<peer_t>;
+    auto choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
+                    const app_predicate_t& app_service_predicate) const -> std::shared_ptr<peer_t>;
     auto choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
-                    peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t>;
+                    const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
+                    -> std::shared_ptr<peer_t>;
+
+
+private:
+    auto choose_random(const app_enumerator_t& enumerator, const std::string& app_name,
+                    const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
+                    -> std::shared_ptr<peer_t>;
 };
 
 } // namespace vicodyn
