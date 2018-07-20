@@ -98,11 +98,11 @@ public:
 
         auto add_request_timing(clock_t::time_point start, clock_t::duration elapsed) -> void;
 
-        auto average_elapsed() const -> clock_t::duration;
+        auto average_elapsed_ns() const -> double;
     };
 
-    using app_service_f = std::function<bool(const app_service_t& app_service)>;
-    using peer_f = std::function<bool(const peer_t& peer_service)>;
+    using app_predicate_t = std::function<bool(const app_service_t& app_service)>;
+    using peer_predicate_t = std::function<bool(const peer_t& peer_service)>;
     using endpoints_t = std::vector<asio::ip::tcp::endpoint>;
     // peer_uuid -> peer_ptr
     using peers_data_t = std::unordered_map<std::string, std::shared_ptr<peer_t>>;
@@ -161,10 +161,10 @@ public:
 
     auto peer(const std::string& uuid) -> std::shared_ptr<peer_t>;
 
-    auto choose_random(const std::string& app_name, peer_f peer_predicate, app_service_f app_service_predicate) const
+    auto choose_random(const std::string& app_name, peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const
                     -> std::shared_ptr<peer_t>;
     auto choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
-                    peer_f peer_predicate, app_service_f app_service_predicate) const -> std::shared_ptr<peer_t>;
+                    peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t>;
 };
 
 } // namespace vicodyn

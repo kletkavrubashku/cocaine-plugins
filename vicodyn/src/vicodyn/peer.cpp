@@ -26,39 +26,31 @@ namespace cocaine {
 namespace vicodyn {
 namespace {
 
-auto double_rand(double min, double max) -> double {
-    // We use keywords "static" and "thread_local", because this function is called many times
-    // from different threads, and creation of entities below is very expensive.
-    static thread_local std::mt19937 gen(std::random_device{}());
-    // TODO: Use "constexpr" instead "thread_local" when std::uniform_int_distribution::operator()(...) become a const.
-    static thread_local std::uniform_real_distribution<double> distribution(min, max);
-    return distribution(gen);
-}
-
 template<class T>
 class weighted_distribution {
     std::vector<T> elements_;
-    std::vector<double> partial_weight_sums_;
+    std::vector<double> weights_;
 
 public:
     weighted_distribution(std::size_t reserve) {
         elements_.reserve(reserve);
-        partial_weight_sums_.reserve(reserve);
+        weights_.reserve(reserve);
     }
 
     auto add(T elem, double weight) -> void {
-        auto prev_sum = partial_weight_sums_.empty() ? 0 : partial_weight_sums_.back();
-        partial_weight_sums_.push_back(prev_sum + weight);
+        weights_.push_back( weight);
         elements_.push_back(std::move(elem));
     }
 
-    auto random() const -> boost::optional<T> {
-        if (partial_weight_sums_.empty()) {
+    auto random() -> boost::optional<T> {
+        if (weights_.empty()) {
             return {};
         }
-        auto rand_partial_sum = double_rand(0, partial_weight_sums_.back());
-        auto elem_it = std::lower_bound(partial_weight_sums_.begin(), partial_weight_sums_.end(), rand_partial_sum);
-        return elements_[std::distance(partial_weight_sums_.begin(), elem_it)];
+        // We use keyword "static", because creation of entity below is very expensive
+        static std::mt19937 generator{std::random_device{}()};
+        // Attention: unnecessary copying. TODO: Fix when it will be possible
+        std::discrete_distribution<std::size_t> distribution(weights_.begin(), weights_.end());
+        return elements_[distribution(generator)];
     }
 };
 
@@ -334,12 +326,12 @@ auto peers_t::app_service_t::add_request_timing(clock_t::time_point start, clock
     timings_ewma_->add(start, elapsed.count());
 }
 
-auto peers_t::app_service_t::average_elapsed() const -> clock_t::duration {
-    return clock_t::duration(static_cast<clock_t::duration::rep>(timings_ewma_->get()));
+auto peers_t::app_service_t::average_elapsed_ns() const -> double {
+    return timings_ewma_->get();
 }
 
-auto peers_t::choose_random(const std::string& app_name, peer_f peer_predicate,
-                app_service_f app_service_predicate) const -> std::shared_ptr<peer_t> {
+auto peers_t::choose_random(const std::string& app_name, peer_predicate_t peer_predicate,
+                app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t> {
     return apply_shared([&](const data_t& data) -> std::shared_ptr<peer_t> {
         auto apps_it = data.apps.find(app_name);
         if (apps_it == data.apps.end() || apps_it->second.empty()) {
@@ -360,8 +352,8 @@ auto peers_t::choose_random(const std::string& app_name, peer_f peer_predicate,
             if (!peer_predicate(*peer_it->second)) {
                 continue;
             }
-            auto positive_duration = std::max(app_service.second.average_elapsed(), clock_t::duration(1));
-            distribution.add(peer_it, 1. / positive_duration.count());
+            auto positive_duration_ns = std::max(app_service.second.average_elapsed_ns(), 1.);
+            distribution.add(peer_it, 1. / positive_duration_ns);
         }
         auto chosen = distribution.random();
         if (!chosen) {
@@ -372,7 +364,7 @@ auto peers_t::choose_random(const std::string& app_name, peer_f peer_predicate,
 }
 
 auto peers_t::choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
-                peer_f peer_predicate, app_service_f app_service_predicate) const -> std::shared_ptr<peer_t> {
+                peer_predicate_t peer_predicate, app_predicate_t app_service_predicate) const -> std::shared_ptr<peer_t> {
     return apply_shared([&](const data_t& data) -> std::shared_ptr<peer_t> {
         auto apps_it = data.apps.find(app_name);
         if (apps_it == data.apps.end() || apps_it->second.empty()) {
@@ -397,8 +389,8 @@ auto peers_t::choose_random(const std::vector<std::string>& uuids, const std::st
             if (!peer_predicate(*peer_it->second)) {
                 continue;
             }
-            auto positive_duration = std::max(app_service_it->second.average_elapsed(), clock_t::duration(1));
-            distribution.add(peer_it, 1. / positive_duration.count());
+            auto positive_duration_ns = std::max(app_service_it->second.average_elapsed_ns(), 1.);
+            distribution.add(peer_it, 1. / positive_duration_ns);
         }
         auto chosen = distribution.random();
         if (!chosen) {
