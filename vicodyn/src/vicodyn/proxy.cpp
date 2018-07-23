@@ -386,7 +386,6 @@ private:
         buffer.event = std::move(event);
         buffer.headers = std::move(headers);
 
-        COCAINE_LOG_DEBUG(endpoint.logger, "processing enqueue");
         try {
             choose_endpoint();
 
