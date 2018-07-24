@@ -39,7 +39,7 @@ private:
     peers_t& peers;
     std::string app_name;
     api::vicodyn::balancer_ptr balancer;
-
+    std::size_t max_buffer_size;
     const std::unique_ptr<logging::logger_t> logger;
 };
 
