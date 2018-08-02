@@ -43,18 +43,18 @@ auto simple_t::retry_count() -> size_t {
     return _retry_count;
 }
 
-auto simple_t::on_error(const std::shared_ptr<peer_t>& peer, std::error_code ec, const std::string& msg) -> void {
+auto simple_t::on_error(const peer_t& peer, std::error_code ec, const std::string& msg) -> void {
     COCAINE_LOG_WARNING(logger, "peer errored - {}({})", ec.message(), msg);
     if(ec.category() == error::node_category() && ec.value() == error::node_errors::not_running) {
-        peers.erase_app(peer->uuid(), app_name);
+        peers.erase_app(peer.uuid(), app_name);
     }
     if(ec.category() == error::overseer_category() && ec.value() == error::queue_is_full) {
-        peers.ban_app(peer->uuid(), app_name, ban_timeout);
+        peers.ban_app(peer.uuid(), app_name, ban_timeout);
         COCAINE_LOG_WARNING(logger, "queue is full, peer banned for {}ms - {}", ban_timeout.count(), peer);
     }
 }
 
-auto simple_t::is_recoverable(const std::shared_ptr<peer_t>&, std::error_code ec) -> bool {
+auto simple_t::is_recoverable(std::error_code ec) -> bool {
     bool queue_is_full = (ec.category() == error::overseer_category() && ec.value() == error::queue_is_full);
     bool unavailable = (ec.category() == error::node_category() && ec.value() == error::not_running);
     bool disconnected = (ec.category() == error::dispatch_category() && ec.value() == error::not_connected);

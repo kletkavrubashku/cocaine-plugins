@@ -31,9 +31,9 @@ public:
 
     auto retry_count() -> size_t override;
 
-    auto on_error(const std::shared_ptr<peer_t>&, std::error_code, const std::string&) -> void override;
+    auto on_error(const peer_t& peer, std::error_code, const std::string&) -> void override;
 
-    auto is_recoverable(const std::shared_ptr<peer_t>&, std::error_code ec) -> bool override;
+    auto is_recoverable(std::error_code ec) -> bool override;
 
 };
 
