@@ -103,7 +103,7 @@ class client_stream_t {
 
 private:
     template<class F>
-    auto catch_connection_error(F f) -> bool {
+    auto catch_connection_error(F&& f) -> bool {
         try {
             return f();
         } catch (const std::system_error& e) {
@@ -156,7 +156,7 @@ class endpoint_t {
 
 private:
     template<class F>
-    auto catch_connection_error(F f) -> bool {
+    auto catch_connection_error(F&& f) -> bool {
         try {
             f();
             return true;
@@ -429,7 +429,11 @@ private:
     }
 
     auto on_backward_chunk(const hpack::headers_t& headers, std::string chunk) -> void {
-        client_stream.chunk(headers, std::move(chunk));
+        if (!client_stream.chunk(headers, std::move(chunk))) {
+            apply([&](data_t& safe) {
+                //safe.endpoint->error(headers, ec, msg);
+            });
+        }
         request_context->add_checkpoint("after_bchunk");
     }
 
@@ -439,6 +443,10 @@ private:
                 return std::make_pair(safe.endpoint->peer().uuid(), safe.endpoint->elapsed_time());
             });
             proxy.peers.add_app_request_duration(request_duration.first, proxy.app_name, request_duration.second);
+        } else {
+            apply([&](data_t& safe) {
+                //safe.endpoint->error(headers, ec, msg);
+            });
         }
         request_context->add_checkpoint("after_bchoke");
         request_context->finish();
@@ -451,7 +459,11 @@ private:
         if (proxy.balancer->is_recoverable(ec)) {
             retry_or_fail();
         } else {
-            client_stream.error(headers, ec, msg);
+            if (!client_stream.error(headers, ec, msg)) {
+                apply([&](data_t& safe) {
+                    //safe.endpoint->error(headers, ec, msg);
+                });
+            }
             request_context->add_checkpoint("after_berror");
             request_context->fail(ec, msg);
         }
