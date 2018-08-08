@@ -6,11 +6,16 @@ ADD_LIBRARY(vicodyn SHARED
         src/api/vicodyn/balancer.cpp
         src/gateway/vicodyn.cpp
         src/module.cpp
-        src/vicodyn/request_context.cpp
         src/vicodyn/balancer/simple.cpp
-        src/vicodyn/proxy.cpp
-        src/vicodyn/peer.cpp
         src/vicodyn/error.cpp
+        src/vicodyn/peer.cpp
+        src/vicodyn/proxy/buffer.cpp
+        src/vicodyn/proxy/discardable.cpp
+        src/vicodyn/proxy/endpoint.cpp
+        src/vicodyn/proxy/middlewares.cpp
+        src/vicodyn/proxy/proxy.cpp
+        src/vicodyn/proxy/safe_stream.cpp
+        src/vicodyn/request_context.cpp
         )
 
 ADD_DEFINITIONS("-DVICODYN_USE_DEBUG")

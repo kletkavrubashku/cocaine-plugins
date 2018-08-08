@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cocaine/vicodyn/forwards.hpp"
-#include "cocaine/vicodyn/proxy.hpp"
+#include "cocaine/vicodyn/proxy/proxy.hpp"
 
 #include <cocaine/forwards.hpp>
 #include <cocaine/rpc/graph.hpp>

@@ -2,7 +2,7 @@
 
 #include "../../node/include/cocaine/idl/node.hpp"
 
-#include "cocaine/vicodyn/proxy.hpp"
+#include "cocaine/vicodyn/proxy/proxy.hpp"
 
 #include <cocaine/context.hpp>
 #include <cocaine/context/quote.hpp>
