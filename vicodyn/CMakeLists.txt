@@ -1,5 +1,6 @@
 INCLUDE_DIRECTORIES(
         ${PROJECT_SOURCE_DIR}/vicodyn/include
+        ${PROJECT_SOURCE_DIR}/vicodyn/src
         ${PROJECT_SOURCE_DIR}/node/include)
 
 ADD_LIBRARY(vicodyn SHARED
@@ -7,6 +8,7 @@ ADD_LIBRARY(vicodyn SHARED
         src/gateway/vicodyn.cpp
         src/module.cpp
         src/vicodyn/balancer/simple.cpp
+        src/vicodyn/darkmetrics.cpp
         src/vicodyn/error.cpp
         src/vicodyn/peer.cpp
         src/vicodyn/proxy/buffer.cpp

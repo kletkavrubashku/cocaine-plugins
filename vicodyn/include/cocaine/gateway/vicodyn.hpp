@@ -3,6 +3,7 @@
 #include "cocaine/idl/vicodyn.hpp"
 #include "cocaine/vicodyn/forwards.hpp"
 #include "cocaine/vicodyn/peer.hpp"
+#include "vicodyn/darkmetrics.hpp"
 
 #include <cocaine/executor/asio.hpp>
 #include <cocaine/api/cluster.hpp>
@@ -76,6 +77,7 @@ private:
     dynamic_t::object_t locator_extra;
     api::gateway_ptr wrapped_gateway;
     vicodyn::peers_t peers;
+    vicodyn::darkmetrics_t darkmetrics;
     dynamic_t args;
     std::string local_uuid;
     std::unique_ptr<logging::logger_t> logger;

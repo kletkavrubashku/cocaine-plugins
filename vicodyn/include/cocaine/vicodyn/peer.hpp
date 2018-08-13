@@ -16,6 +16,11 @@
 
 namespace cocaine {
 namespace vicodyn {
+namespace defaults {
+
+    constexpr double system_weight = 1;
+
+} // namespace defaults
 
 class peer_t : public std::enable_shared_from_this<peer_t> {
 public:
@@ -105,19 +110,24 @@ public:
         auto avg_request_duration_ns() const -> double;
     };
 
+    struct peer_data_t {
+        std::shared_ptr<peer_t> peer;
+        std::atomic<double> system_weight{defaults::system_weight};
+    };
+
     using app_predicate_t = std::function<bool(const app_service_t& app_service)>;
     using peer_predicate_t = std::function<bool(const peer_t& peer_service)>;
     using endpoints_t = std::vector<asio::ip::tcp::endpoint>;
-    // peer_uuid -> peer_ptr
-    using peers_data_t = std::unordered_map<std::string, std::shared_ptr<peer_t>>;
+    // peer_uuid -> peer_data
+    using peers_map_t = std::unordered_map<std::string, peer_data_t>;
     // peer_uuid -> app_service
     using app_services_t = std::unordered_map<std::string, app_service_t>;
     // app_name -> app_services
-    using app_data_t = std::unordered_map<std::string, app_services_t>;
+    using apps_map_t = std::unordered_map<std::string, app_services_t>;
 
     struct data_t {
-        peers_data_t peers;
-        app_data_t apps;
+        peers_map_t peers;
+        apps_map_t apps;
     };
 
 
@@ -125,17 +135,32 @@ private:
     using app_handler_t = std::function<void(const std::string& uuid, const app_service_t& app_service)>;
     using app_enumerator_t = std::function<void(const app_services_t& apps, const app_handler_t& handler)>;
 
+    struct timings_t {
+        const bool enabled;
+        const clock_t::duration window;
+
+        timings_t(const dynamic_t& args);
+    };
+
     context_t& context;
     std::unique_ptr<logging::logger_t> logger;
     executor::owning_asio_t executor;
     data_t data;
-    const clock_t::duration timings_window;
+    const timings_t timings;
     mutable boost::shared_mutex mutex;
 
 
 public:
     template<class F>
     auto apply_shared(F&& f) const -> decltype(f(std::declval<const data_t&>())) {
+        boost::shared_lock<boost::shared_mutex> lock(mutex);
+        return f(data);
+    }
+
+    /// Use this method at your own risk. The method takes a shared lock and allows to change data.
+    /// You can use this method if you go to make changes atomically.
+    template<class F>
+    auto apply_shared_unsafe(F&& f) -> decltype(f(std::declval<data_t&>())) {
         boost::shared_lock<boost::shared_mutex> lock(mutex);
         return f(data);
     }

@@ -213,14 +213,20 @@ auto peer_t::x_cocaine_cluster() const -> const std::string& {
 peers_t::peers_t(context_t& context, const dynamic_t& args)
     : context(context)
     , logger(context.log("vicodyn/peers_t"))
-    , timings_window(std::chrono::milliseconds(args.as_object().at("timings-window-ms", 30000U).as_uint())) {
+    , timings(args.as_object().at("timings", dynamic_t::empty_object)) {
+    COCAINE_LOG_INFO(logger, "balancing by timings is {}", timings.enabled ? "on" : "off");
+}
+
+peers_t::timings_t::timings_t(const dynamic_t& args)
+    : enabled(args.as_object().at("enabled", false).as_bool())
+    , window(args.as_object().at("window_ms", 30000U).as_uint()) {
 }
 
 auto peers_t::register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra)
     -> std::shared_ptr<peer_t>
 {
     return apply([&](data_t& data){
-        auto& peer = data.peers[uuid];
+        auto& peer = data.peers[uuid].peer;
         if (!peer) {
             peer = std::make_shared<peer_t>(context, executor.asio(), endpoints, uuid, std::move(extra));
             peer->connect();
@@ -236,7 +242,7 @@ auto peers_t::register_peer(const std::string& uuid, const endpoints_t& endpoint
 
 auto peers_t::register_peer(const std::string& uuid, std::shared_ptr<peer_t> peer) -> void {
     apply([&](data_t& data) {
-        data.peers[uuid] = std::move(peer);
+        data.peers[uuid].peer = std::move(peer);
     });
 }
 
@@ -248,7 +254,7 @@ auto peers_t::erase_peer(const std::string& uuid) -> void {
 
 auto peers_t::register_app(const std::string& uuid, const std::string& name) -> void {
     apply([&](data_t& data) {
-        data.apps[name].emplace(uuid, app_service_t(timings_window));
+        data.apps[name].emplace(uuid, app_service_t(timings.window));
     });
 }
 
@@ -275,6 +281,9 @@ auto peers_t::ban_app(const std::string& uuid, const std::string& name, const st
 
 auto peers_t::add_app_request_duration(const std::string& uuid, const std::string& name, clock_t::duration elapsed)
                 -> void {
+    if (!timings.enabled) {
+        return;
+    }
     apply([&](data_t& data) {
         auto apps_it = data.apps.find(name);
         if(apps_it ==  std::end(data.apps)) {
@@ -285,6 +294,8 @@ auto peers_t::add_app_request_duration(const std::string& uuid, const std::strin
             return;
         }
         app_service_it->second.add_request_duration(elapsed);
+        COCAINE_LOG_DEBUG(logger, "request duration registered for uuid={} app={}: value={}ms, avg={}ms",
+                uuid, name, elapsed.count()/1000000., app_service_it->second.avg_request_duration_ns()/1000000.);
     });
 }
 
@@ -302,7 +313,7 @@ auto peers_t::peer(const std::string& uuid) -> std::shared_ptr<peer_t> {
     return apply_shared([&](const data_t& data) -> std::shared_ptr<peer_t>{
         auto it = data.peers.find(uuid);
         if (it != data.peers.end()) {
-            return it->second;
+            return it->second.peer;
         }
         return nullptr;
     });
@@ -367,7 +378,7 @@ auto peers_t::choose_random(const app_enumerator_t& app_enumerator, const std::s
         const auto& app_services = apps_it->second;
 
         // Choose peer according average elapsed time per request
-        weighted_distribution<peers_data_t::const_iterator> distribution(app_services.size());
+        weighted_distribution<peers_map_t::const_iterator> distribution(app_services.size());
         app_enumerator(app_services, [&](const std::string& uuid, const app_service_t& app_service) {
             if (!app_predicate(app_service)) {
                 return;
@@ -376,17 +387,17 @@ auto peers_t::choose_random(const app_enumerator_t& app_enumerator, const std::s
             if (peer_it == data.peers.end()) {
                 return;
             }
-            if (!peer_predicate(*peer_it->second)) {
+            if (!peer_predicate(*peer_it->second.peer)) {
                 return;
             }
             auto positive_duration_ns = std::max(app_service.avg_request_duration_ns(), 1.);
-            distribution.add(peer_it, 1. / positive_duration_ns);
+            distribution.add(peer_it, peer_it->second.system_weight / positive_duration_ns);
         });
         auto chosen = distribution.random();
         if (!chosen) {
             return {};
         }
-        return chosen.get()->second;
+        return chosen.get()->second.peer;
     });
 }
 

@@ -29,18 +29,19 @@
 namespace cocaine {
 
 template<>
-struct dynamic_constructor<vicodyn::peer_t> {
+struct dynamic_constructor<vicodyn::peers_t::peer_data_t> {
     static const bool enable = true;
 
     static inline
     void
-    convert(const vicodyn::peer_t& from, dynamic_t::value_t& to) {
+    convert(const vicodyn::peers_t::peer_data_t& from, dynamic_t::value_t& to) {
         dynamic_t::object_t data;
-        data["extra"] = from.extra();
-        data["connected"] = from.connected();
-        data["endpoints"] = from.endpoints();
-        data["last_active"] = std::chrono::system_clock::to_time_t(from.last_active());
-        data["uuid"] = from.uuid();
+        data["extra"] = from.peer->extra();
+        data["connected"] = from.peer->connected();
+        data["endpoints"] = from.peer->endpoints();
+        data["last_active"] = std::chrono::system_clock::to_time_t(from.peer->last_active());
+        data["uuid"] = from.peer->uuid();
+        data["system_weight"] = from.system_weight.load();
         to = detail::dynamic::incomplete_wrapper<dynamic_t::object_t>();
         boost::get<detail::dynamic::incomplete_wrapper<dynamic_t::object_t>>(to).set(std::move(data));
     }
@@ -103,6 +104,7 @@ vicodyn_t::vicodyn_t(context_t& _context, const std::string& _local_uuid, const 
     locator_extra(locator_extra),
     wrapped_gateway(),
     peers(context, args),
+    darkmetrics(context, peers, args.as_object().at("darkmetrics", dynamic_t::empty_object)),
     args(args),
     local_uuid(_local_uuid),
     logger(context.log(format("gateway/{}", name)))
@@ -121,7 +123,7 @@ vicodyn_t::vicodyn_t(context_t& _context, const std::string& _local_uuid, const 
                 auto it = data.peers.find(uuid);
                 if(it != data.peers.end()) {
                     peers_result = dynamic_t::empty_object;
-                    peers_result.as_object()[it->second->uuid()] = it->second;
+                    peers_result.as_object()[uuid] = it->second;
                 }
             }
         });
@@ -201,7 +203,8 @@ auto vicodyn_t::consume(const std::string& uuid,
     wrapped_gateway->consume(uuid, name, version, endpoints, protocol, extra);
     mapping.apply([&](proxy_map_t& mapping){
         if(name == "node") {
-            peers.register_peer(uuid, endpoints, extra);
+            auto peer = peers.register_peer(uuid, endpoints, extra);
+            darkmetrics.subscribe(peer->x_cocaine_cluster());
             COCAINE_LOG_INFO(logger, "registered node service {} with uuid {}", name, uuid);
         } else if (protocol == app_protocol) {
             peers.register_app(uuid, name);
