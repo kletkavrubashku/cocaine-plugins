@@ -32,7 +32,7 @@
 
 #include <boost/optional/optional.hpp>
 
-#include <zookeeper/zookeeper.h>
+#include <unordered_set>
 
 namespace cocaine { namespace cluster {
 
@@ -155,7 +155,12 @@ auto unicorn_cluster_t::subscriber_t::subscribe() -> void {
 
 auto unicorn_cluster_t::subscriber_t::on_children(std::future<response::children_subscribe> future) -> void {
     try {
-        update_state(std::get<1>(future.get()));
+        auto update = future.get();
+        if (std::get<0>(update) == unicorn::not_existing_version) {
+            COCAINE_LOG_WARNING(parent.log, "no data in unicorn by path {}", parent.config.path);
+            return;
+        }
+        update_state(std::move(std::get<1>(update)));
     } catch (const std::system_error& e) {
         COCAINE_LOG_WARNING(parent.log, "failure during subscription: {}, resubscribing", error::to_string(e));
         timer.defer_retry();
@@ -163,8 +168,9 @@ auto unicorn_cluster_t::subscriber_t::on_children(std::future<response::children
 }
 
 auto unicorn_cluster_t::subscriber_t::update_state(std::vector<std::string> nodes) -> void {
-    COCAINE_LOG_INFO(parent.log, "received uuid list from zookeeper, got {} uuids", nodes.size());
-    std::set<std::string> nodes_set(nodes.begin(), nodes.end());
+    const std::unordered_set<std::string> nodes_set(std::make_move_iterator(nodes.begin()),
+            std::make_move_iterator(nodes.end()));
+    COCAINE_LOG_INFO(parent.log, "received uuid list from unicorn, got {} uuids", nodes_set.size());
     // scopes should be destroyed outside of subscriptions' lock
     std::vector<api::auto_scope_t> scopes_to_destroy;
     subscriptions.apply([&](subscriptions_t& subscriptions) {
@@ -180,7 +186,7 @@ auto unicorn_cluster_t::subscriber_t::update_state(std::vector<std::string> node
                 it++;
             }
         }
-        for(const auto& node: nodes) {
+        for(const auto& node: nodes_set) {
             if(node == parent.locator.uuid()) {
                 continue;
             }
