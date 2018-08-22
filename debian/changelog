@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.71) unstable; urgency=medium
+
+  * fix: Skip invalid announces about nodes
+
+ -- Artem Selishchev <arselishev@gmail.com>  Wed, 22 Aug 2018 17:08:49 +0300
+
 cocaine-plugins (0.12.14.70) unstable; urgency=medium
 
   * Fixed(uniresis): start node create sequence in case of `not exist`
