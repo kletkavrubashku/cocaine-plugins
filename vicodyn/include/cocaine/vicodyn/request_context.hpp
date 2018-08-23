@@ -21,11 +21,13 @@ class request_context_t: public std::enable_shared_from_this<request_context_t> 
     clock_t::time_point start_time_;
     std::atomic_flag closed_;
 
-    synchronized<std::vector<std::shared_ptr<peer_t>>> used_peers_;
-    synchronized<std::vector<checkpoint_t>> checkpoints_;
-    size_t retry_counter_;
+    using peer_array_t = std::vector<std::shared_ptr<peer_t>>;
+    using checkpoint_array_t = std::vector<checkpoint_t>;
+    using counter_map_t = std::unordered_map<std::string, std::atomic<std::size_t>>;
 
-    synchronized<boost::any> custom_context_;
+    synchronized<peer_array_t> used_peers_;
+    synchronized<checkpoint_array_t> checkpoints_;
+    synchronized<counter_map_t> counters_;
 
 public:
     request_context_t(blackhole::logger_t& logger);
@@ -38,11 +40,7 @@ public:
 
     auto peer_use_count(const std::string& peer_uuid) -> size_t;
 
-    auto register_retry() -> void;
-
-    auto retry_count() -> size_t;
-
-    auto custom_context() -> synchronized<boost::any>&;
+    auto counter(const std::string& name) -> std::atomic<std::size_t>&;
 
     template <size_t N>
     auto add_checkpoint(const char(&name)[N]) -> void {

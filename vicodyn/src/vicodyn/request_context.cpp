@@ -8,8 +8,7 @@ namespace vicodyn {
 request_context_t::request_context_t(blackhole::logger_t& logger) :
     logger_(logger),
     start_time_(clock_t::now()),
-    closed_(ATOMIC_FLAG_INIT),
-    retry_counter_(0)
+    closed_(ATOMIC_FLAG_INIT)
 {}
 
 request_context_t::~request_context_t() {
@@ -34,16 +33,8 @@ auto request_context_t::peer_use_count(const std::string& peer_uuid) -> size_t {
     });
 }
 
-auto request_context_t::register_retry() -> void {
-    retry_counter_++;
-}
-
-auto request_context_t::retry_count() -> size_t {
-    return retry_counter_;
-}
-
-auto request_context_t::custom_context() -> synchronized<boost::any>& {
-    return custom_context_;
+auto request_context_t::counter(const std::string& name) -> std::atomic<std::size_t>& {
+    return (*counters_.synchronize())[name];
 }
 
 auto request_context_t::finish() -> void {
@@ -67,17 +58,22 @@ auto request_context_t::write(int level, const std::string& msg) -> void {
     add_checkpoint("total_duration_ms");
 
     blackhole::view_of<blackhole::attributes_t>::type view;
-    auto sync_peers = used_peers_.synchronize();
-    auto sync_checkpoints = checkpoints_.synchronize();
-    for (const auto& peer: *sync_peers) {
-        view.emplace_back("peer", peer->uuid());
-    }
-    view.emplace_back("retry_cnt", retry_counter_);
-    for (const auto& checkpoint: *sync_checkpoints) {
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(checkpoint.when - start_time_);
-        view.emplace_back(blackhole::string_view(checkpoint.message, checkpoint.msg_len), ms.count());
-    }
-
+    used_peers_.apply([&](const peer_array_t & peers) {
+        for (const auto& peer: peers) {
+            view.emplace_back("peer", peer->uuid());
+        }
+    });
+    checkpoints_.apply([&](const checkpoint_array_t & checkpoints) {
+        for (const auto& checkpoint: checkpoints) {
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(checkpoint.when - start_time_);
+            view.emplace_back(blackhole::string_view(checkpoint.message, checkpoint.msg_len), ms.count());
+        }
+    });
+    counters_.apply([&](const counter_map_t& counters) {
+        for (const auto& counter: counters) {
+            view.emplace_back(counter.first, counter.second.load());
+        }
+    });
     COCAINE_LOG(logger_, logging::priorities(level), msg, view);
 }
 

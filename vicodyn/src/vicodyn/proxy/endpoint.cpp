@@ -86,11 +86,14 @@ auto endpoint_t::store_elapsed_time() -> void {
 }
 
 auto endpoint_t::choose_endpoint(const hpack::headers_t& headers, std::string&& event) -> bool {
+    static const std::string total_counter_name = "total_attempts";
+
     COCAINE_LOG_DEBUG(base_logger_, "choose endpoint");
     peer_ = balancer_->choose_peer(request_context_, headers, event);
+    request_context_->mark_used_peer(peer_);
+    ++request_context_->counter(total_counter_name);
     logger_ = std::make_unique<blackhole::wrapper_t>(base_logger_, blackhole::attributes_t{{"peer", peer_->uuid()}});
     start_time_ = clock_t::now();
-    request_context_->mark_used_peer(peer_);
     try {
         COCAINE_LOG_DEBUG(logger_, "open stream");
         auto shared_dispatch = std::shared_ptr<dispatch<app_tag_t>>(life_cycle_.lock(), &backward_dispatch_);
@@ -116,11 +119,7 @@ auto endpoint_t::retry(bool reconnect) -> void {
         throw error_t("retry is forbidden - buffer overflow");
     }
     while (true) {
-        if (request_context_->retry_count() >= balancer_->retry_count()) {
-            throw error_t("retry is forbidden - maximum number of tries reached");
-        }
         request_context_->add_checkpoint("retry");
-        request_context_->register_retry();
         if (choose_endpoint(buffer_.headers(), std::string(buffer_.event()))) {
             break;
         } else if (reconnect) {

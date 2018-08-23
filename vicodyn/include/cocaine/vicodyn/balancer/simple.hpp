@@ -17,9 +17,9 @@ class simple_t: public api::vicodyn::balancer_t {
     peers_t& peers;
     std::unique_ptr<logging::logger_t> logger;
     dynamic_t args;
-    size_t _retry_count;
     std::string app_name;
     std::string x_cocaine_cluster;
+    const size_t attempt_limit;
     const std::chrono::milliseconds ban_timeout;
 
 public:
@@ -28,8 +28,6 @@ public:
 
     auto choose_peer(const std::shared_ptr<request_context_t>& request_context, const hpack::headers_t& headers,
                      const std::string& event) -> std::shared_ptr<cocaine::vicodyn::peer_t> override;
-
-    auto retry_count() -> size_t override;
 
     auto on_error(const std::shared_ptr<peer_t>&, std::error_code, const std::string&) -> void override;
 

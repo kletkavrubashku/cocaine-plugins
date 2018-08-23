@@ -14,9 +14,9 @@ simple_t::simple_t(context_t& ctx, peers_t& peers, asio::io_service& loop, const
     peers(peers),
     logger(ctx.log(format("balancer/simple/{}", app_name))),
     args(args),
-    _retry_count(args.as_object().at("retry_count", 4u).as_uint()),
     app_name(app_name),
     x_cocaine_cluster(locator_extra.at("x-cocaine-cluster", "").as_string()),
+    attempt_limit(args.as_object().at("attempts", dynamic_t::empty_object).as_object().at("simple", 2U) .as_uint()),
     ban_timeout(args.as_object().at("ban-timeout-ms", 0U).as_uint())
 {
     COCAINE_LOG_INFO(logger, "created simple balancer for app {}", app_name);
@@ -24,6 +24,14 @@ simple_t::simple_t(context_t& ctx, peers_t& peers, asio::io_service& loop, const
 
 auto simple_t::choose_peer(const std::shared_ptr<request_context_t>& request_context,
                 const hpack::headers_t& /*headers*/, const std::string& /*event*/) -> std::shared_ptr<peer_t> {
+    static const std::string simple_counter_name = "simple_attempts";
+
+    auto& attempts = request_context->counter(simple_counter_name);
+    if (attempts >= attempt_limit) {
+        COCAINE_LOG_WARNING(logger, "all `{}` attempts of counter `{}` was used", attempt_limit, simple_counter_name);
+        throw error_t("count of attempts is reached");
+    }
+
     auto peer_predicate = [&](const peer_t& peer) {
         return  peer.connected() &&
                 peer.x_cocaine_cluster() == x_cocaine_cluster &&
@@ -36,11 +44,8 @@ auto simple_t::choose_peer(const std::shared_ptr<request_context_t>& request_con
     if (!peer) {
         throw error_t("no peers found");
     }
+    ++attempts;
     return peer;
-}
-
-auto simple_t::retry_count() -> size_t {
-    return _retry_count;
 }
 
 auto simple_t::on_error(const std::shared_ptr<peer_t>& peer, std::error_code ec, const std::string& msg) -> void {

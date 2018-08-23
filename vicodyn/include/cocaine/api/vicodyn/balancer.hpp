@@ -27,9 +27,6 @@ public:
                      const hpack::headers_t& headers, const std::string& event) -> std::shared_ptr<cocaine::vicodyn::peer_t> = 0;
 
     virtual
-    auto retry_count() -> size_t = 0;
-
-    virtual
     auto on_error(const std::shared_ptr<cocaine::vicodyn::peer_t>& peer, std::error_code ec, const std::string& msg) -> void = 0;
 
     virtual
