@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.72) unstable; urgency=low
+
+  * feat: Subscribe on weights from darkvoice for smart balancing
+
+ -- Artem Selishchev <arselishev@gmail.com>  Thu, 23 Aug 2018 14:38:49 +0300
+
 cocaine-plugins (0.12.14.71) unstable; urgency=medium
 
   * fix: Skip invalid announces about nodes
