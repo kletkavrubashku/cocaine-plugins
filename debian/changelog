@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.73) unstable; urgency=medium
+
+  * fix: Fix crash during stop of vicodyn
+
+ -- Artem Selishchev <arselishev@gmail.com>  Sun, 26 Aug 2018 19:23:08 +0300
+
 cocaine-plugins (0.12.14.72) unstable; urgency=low
 
   * feat: Subscribe on weights from darkvoice for smart balancing
