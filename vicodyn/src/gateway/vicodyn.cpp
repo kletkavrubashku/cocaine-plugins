@@ -253,7 +253,7 @@ auto vicodyn_t::cleanup(const std::string& uuid) -> void {
         for(auto it = mapping.begin(); it != mapping.end();) {
             if(it->second.proxy.empty()) {
                 it->second.actor->terminate();
-                mapping.erase(it);
+                it = mapping.erase(it);
             } else {
                 it++;
             }
