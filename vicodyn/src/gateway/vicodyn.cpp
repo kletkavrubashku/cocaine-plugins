@@ -47,23 +47,6 @@ struct dynamic_constructor<vicodyn::peers_t::peer_data_t> {
     }
 };
 
-template<>
-struct dynamic_constructor<vicodyn::peers_t::app_services_t> {
-    static const bool enable = true;
-
-    static inline
-    void
-    convert(const vicodyn::peers_t::app_services_t& from, dynamic_t::value_t& to) {
-        dynamic_t::array_t data;
-        data.reserve(from.size());
-        for (const auto& pair: from) {
-            data.push_back(pair.first);
-        }
-        to = detail::dynamic::incomplete_wrapper<dynamic_t::object_t>();
-        boost::get<detail::dynamic::incomplete_wrapper<dynamic_t::array_t>>(to).set(std::move(data));
-    }
-};
-
 } // namespace cocaine
 
 
@@ -133,25 +116,50 @@ vicodyn_t::vicodyn_t(context_t& _context, const std::string& _local_uuid, const 
         dynamic_t result = dynamic_t::empty_object;
         dynamic_t& app_result = result.as_object()["apps"];
         peers.apply_shared([&](const vicodyn::peers_t::data_t& data) mutable {
+            auto convert_app_services = [&](const vicodyn::peers_t::app_services_t& from) {
+                dynamic_t app_services_result = dynamic_t::empty_object;
+                for (const auto& app_service : from) {
+                    dynamic_t& peer_result = app_services_result.as_object()[app_service.first];
+
+                    using duration_t = vicodyn::peers_t::clock_t::duration;
+                    auto banned_for_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            app_service.second.banned_for());
+                    if (banned_for_ms > duration_t::zero()) {
+                        peer_result.as_object()["banned_for_ms"] = banned_for_ms.count();
+                    }
+
+                    auto positive_request_duration = std::max(app_service.second.avg_request_duration(), duration_t(1));
+                    // Division by a million is used instead duration_cast for better precision
+                    peer_result.as_object()["request_duration_ms"] = positive_request_duration.count() / 1000000.;
+
+                    auto system_weight = vicodyn::defaults::system_weight;
+                    auto peer_it = data.peers.find(app_service.first);
+                    if (peer_it != data.peers.end()) {
+                        system_weight = peer_it->second.system_weight.load();
+                    }
+                    peer_result.as_object()["system_weight"] = system_weight;
+                    peer_result.as_object()["total_weight"] = system_weight / positive_request_duration.count();
+                    peer_result.as_object()["x_cocaine_cluster"] = peer_it->second.peer->x_cocaine_cluster();
+                }
+                return app_services_result;
+            };
+
             if(app.empty()) {
-                app_result = data.apps;
+                for (const auto& app : data.apps) {
+                    app_result.as_object()[app.first] = convert_app_services(app.second);
+                }
             } else {
                 auto it = data.apps.find(app);
                 if(it != data.apps.end()) {
                     app_result = dynamic_t::empty_object;
-                    app_result.as_object()[it->first] = it->second;
+                    app_result.as_object()[it->first] = convert_app_services(it->second);
                 }
             }
         });
         return result;
     });
-    d->on<io::vicodyn::info>([&]() {
-        dynamic_t result = dynamic_t::empty_object;
-        peers.apply_shared([&](const vicodyn::peers_t::data_t& data) {
-            result.as_object()["apps"] = data.apps;
-            result.as_object()["peers"] = data.peers;
-        });
-        return result;
+    d->on<io::vicodyn::info>([]() -> dynamic_t {
+        throw error_t("not implemented");
     });
     COCAINE_LOG_INFO(logger, "created dispatch");
     auto actor = std::make_unique<tcp_actor_t>(context, std::move(d));

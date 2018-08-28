@@ -294,8 +294,10 @@ auto peers_t::add_app_request_duration(const std::string& uuid, const std::strin
             return;
         }
         app_service_it->second.add_request_duration(elapsed);
-        COCAINE_LOG_DEBUG(logger, "request duration registered for uuid={} app={}: value={}ms, avg={}ms",
-                uuid, name, elapsed.count()/1000000., app_service_it->second.avg_request_duration_ns()/1000000.);
+        COCAINE_LOG_DEBUG(logger, "request duration registered for uuid={} app={}: value={}ms, avg={}ms", uuid, name,
+                std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                        app_service_it->second.avg_request_duration()).count());
     });
 }
 
@@ -333,12 +335,16 @@ auto peers_t::app_service_t::banned() const -> bool {
     return ban_until_ > clock_t::now();
 }
 
+auto peers_t::app_service_t::banned_for() const -> clock_t::duration {
+    return std::max(clock_t::duration::zero(), ban_until_ - clock_t::now());
+}
+
 auto peers_t::app_service_t::add_request_duration(clock_t::duration elapsed) -> void {
     timings_ewma_->add(elapsed.count());
 }
 
-auto peers_t::app_service_t::avg_request_duration_ns() const -> double {
-    return timings_ewma_->get();
+auto peers_t::app_service_t::avg_request_duration() const -> clock_t::duration {
+    return clock_t::duration(static_cast<clock_t::duration::rep>(timings_ewma_->get()));
 }
 
 auto peers_t::choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
@@ -390,8 +396,8 @@ auto peers_t::choose_random(const app_enumerator_t& app_enumerator, const std::s
             if (!peer_predicate(*peer_it->second.peer)) {
                 return;
             }
-            auto positive_duration_ns = std::max(app_service.avg_request_duration_ns(), 1.);
-            distribution.add(peer_it, peer_it->second.system_weight / positive_duration_ns);
+            auto positive_duration = std::max(app_service.avg_request_duration(), clock_t::duration(1));
+            distribution.add(peer_it, peer_it->second.system_weight / positive_duration.count());
         });
         auto chosen = distribution.random();
         if (!chosen) {

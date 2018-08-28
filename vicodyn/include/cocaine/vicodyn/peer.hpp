@@ -98,8 +98,8 @@ public:
         app_service_t(clock_t::duration timings_window);
 
         auto ban(std::chrono::milliseconds timeout) -> void;
-
         auto banned() const -> bool;
+        auto banned_for() const -> clock_t::duration;
 
         /// Adds the request processing time to consider the average value.
         ///
@@ -107,7 +107,7 @@ public:
         auto add_request_duration(clock_t::duration elapsed) -> void;
 
         /// Returns the average processing time of request in nanoseconds.
-        auto avg_request_duration_ns() const -> double;
+        auto avg_request_duration() const -> clock_t::duration;
     };
 
     struct peer_data_t {
