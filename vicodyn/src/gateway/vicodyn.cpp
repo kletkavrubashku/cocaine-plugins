@@ -121,14 +121,14 @@ vicodyn_t::vicodyn_t(context_t& _context, const std::string& _local_uuid, const 
                 for (const auto& app_service : from) {
                     dynamic_t& peer_result = app_services_result.as_object()[app_service.first];
 
-                    using duration_t = vicodyn::peers_t::clock_t::duration;
                     auto banned_for_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                             app_service.second.banned_for());
-                    if (banned_for_ms > duration_t::zero()) {
+                    if (banned_for_ms > std::chrono::milliseconds::zero()) {
                         peer_result.as_object()["banned_for_ms"] = banned_for_ms.count();
                     }
 
-                    auto positive_request_duration = std::max(app_service.second.avg_request_duration(), duration_t(1));
+                    auto positive_request_duration = std::max(app_service.second.avg_request_duration(),
+                            std::chrono::nanoseconds(1));
                     // Division by a million is used instead duration_cast for better precision
                     peer_result.as_object()["request_duration_ms"] = positive_request_duration.count() / 1000000.;
 

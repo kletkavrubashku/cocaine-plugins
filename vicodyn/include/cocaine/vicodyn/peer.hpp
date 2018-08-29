@@ -95,19 +95,19 @@ public:
         std::unique_ptr<metrics::usts::ewma<clock_t>> timings_ewma_;
 
     public:
-        app_service_t(clock_t::duration timings_window);
+        app_service_t(std::chrono::milliseconds timings_window);
 
         auto ban(std::chrono::milliseconds timeout) -> void;
         auto banned() const -> bool;
-        auto banned_for() const -> clock_t::duration;
+        auto banned_for() const -> std::chrono::nanoseconds;
 
         /// Adds the request processing time to consider the average value.
         ///
         /// \param elapsed Observed value.
-        auto add_request_duration(clock_t::duration elapsed) -> void;
+        auto add_request_duration(std::chrono::nanoseconds elapsed) -> void;
 
         /// Returns the average processing time of request in nanoseconds.
-        auto avg_request_duration() const -> clock_t::duration;
+        auto avg_request_duration() const -> std::chrono::nanoseconds;
     };
 
     struct peer_data_t {
@@ -137,7 +137,7 @@ private:
 
     struct timings_t {
         const bool enabled;
-        const clock_t::duration window;
+        const std::chrono::milliseconds window;
 
         timings_t(const dynamic_t& args);
     };
@@ -175,7 +175,7 @@ public:
     peers_t(context_t& context, const dynamic_t& args);
 
     auto register_peer(const std::string& uuid, const endpoints_t& endpoints, dynamic_t::object_t extra)
-                    -> std::shared_ptr<peer_t>;
+            -> std::shared_ptr<peer_t>;
 
     auto register_peer(const std::string& uuid, std::shared_ptr<peer_t> peer) -> void;
 
@@ -187,23 +187,24 @@ public:
 
     auto ban_app(const std::string& uuid, const std::string& name, const std::chrono::milliseconds& timeout) -> void;
 
-    auto add_app_request_duration(const std::string& uuid, const std::string& name, clock_t::duration elapsed) -> void;
+    auto add_app_request_duration(const std::string& uuid, const std::string& name, std::chrono::nanoseconds elapsed)
+            -> void;
 
     auto erase(const std::string& uuid) -> void;
 
     auto peer(const std::string& uuid) -> std::shared_ptr<peer_t>;
 
     auto choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
-                    const app_predicate_t& app_service_predicate) const -> std::shared_ptr<peer_t>;
+            const app_predicate_t& app_service_predicate) const -> std::shared_ptr<peer_t>;
     auto choose_random(const std::vector<std::string>& uuids, const std::string& app_name,
-                    const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
-                    -> std::shared_ptr<peer_t>;
+            const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
+            -> std::shared_ptr<peer_t>;
 
 
 private:
     auto choose_random(const app_enumerator_t& enumerator, const std::string& app_name,
-                    const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
-                    -> std::shared_ptr<peer_t>;
+            const peer_predicate_t& peer_predicate, const app_predicate_t& app_service_predicate) const
+            -> std::shared_ptr<peer_t>;
 };
 
 } // namespace vicodyn

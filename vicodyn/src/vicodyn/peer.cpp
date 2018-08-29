@@ -64,7 +64,8 @@ peer_t::~peer_t(){
     });
 }
 
-peer_t::peer_t(context_t& context, asio::io_service& loop, endpoints_t endpoints, std::string uuid, dynamic_t::object_t extra) :
+peer_t::peer_t(context_t& context, asio::io_service& loop, endpoints_t endpoints, std::string uuid,
+        dynamic_t::object_t extra) :
     context_(context),
     loop_(loop),
     timer_(loop),
@@ -155,7 +156,8 @@ auto peer_t::connect() -> void {
         }
         COCAINE_LOG_DEBUG(logger_, "cancelling timer");
         if (!connect_timer->cancel()) {
-            COCAINE_LOG_ERROR(logger_, "could not connect to {} - timed out (timer could not be cancelled)", *endpoint_it);
+            COCAINE_LOG_ERROR(logger_, "could not connect to {} - timed out (timer could not be cancelled)",
+                    *endpoint_it);
             return;
         }
         if (ec) {
@@ -279,8 +281,8 @@ auto peers_t::ban_app(const std::string& uuid, const std::string& name, const st
     });
 }
 
-auto peers_t::add_app_request_duration(const std::string& uuid, const std::string& name, clock_t::duration elapsed)
-                -> void {
+auto peers_t::add_app_request_duration(const std::string& uuid, const std::string& name,
+        std::chrono::nanoseconds elapsed) -> void {
     if (!timings.enabled) {
         return;
     }
@@ -321,8 +323,8 @@ auto peers_t::peer(const std::string& uuid) -> std::shared_ptr<peer_t> {
     });
 }
 
-peers_t::app_service_t::app_service_t(clock_t::duration timings_window)
-    : timings_ewma_(new metrics::usts::ewma<clock_t >(timings_window)) {
+peers_t::app_service_t::app_service_t(std::chrono::milliseconds timings_window)
+    : timings_ewma_(std::make_unique<metrics::usts::ewma<clock_t>>(timings_window)) {
 }
 
 auto peers_t::app_service_t::ban(std::chrono::milliseconds timeout) -> void {
@@ -335,16 +337,16 @@ auto peers_t::app_service_t::banned() const -> bool {
     return ban_until_ > clock_t::now();
 }
 
-auto peers_t::app_service_t::banned_for() const -> clock_t::duration {
-    return std::max(clock_t::duration::zero(), ban_until_ - clock_t::now());
+auto peers_t::app_service_t::banned_for() const -> std::chrono::nanoseconds {
+    return std::max(std::chrono::nanoseconds::zero(), ban_until_ - clock_t::now());
 }
 
-auto peers_t::app_service_t::add_request_duration(clock_t::duration elapsed) -> void {
+auto peers_t::app_service_t::add_request_duration(std::chrono::nanoseconds elapsed) -> void {
     timings_ewma_->add(elapsed.count());
 }
 
-auto peers_t::app_service_t::avg_request_duration() const -> clock_t::duration {
-    return clock_t::duration(static_cast<clock_t::duration::rep>(timings_ewma_->get()));
+auto peers_t::app_service_t::avg_request_duration() const -> std::chrono::nanoseconds {
+    return std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(timings_ewma_->get()));
 }
 
 auto peers_t::choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
@@ -396,7 +398,7 @@ auto peers_t::choose_random(const app_enumerator_t& app_enumerator, const std::s
             if (!peer_predicate(*peer_it->second.peer)) {
                 return;
             }
-            auto positive_duration = std::max(app_service.avg_request_duration(), clock_t::duration(1));
+            auto positive_duration = std::max(app_service.avg_request_duration(), std::chrono::nanoseconds(1));
             distribution.add(peer_it, peer_it->second.system_weight / positive_duration.count());
         });
         auto chosen = distribution.random();
