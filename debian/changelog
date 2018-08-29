@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.75) unstable; urgency=low
+
+  * fix: Print weights of peers for 'vicodyn::apps' request
+
+ -- Artem Selishchev <arselishev@gmail.com>  Wed, 29 Aug 2018 14:51:44 +0300
+
 cocaine-plugins (0.12.14.74) unstable; urgency=low
 
   * feat: Support several counters for attempts
