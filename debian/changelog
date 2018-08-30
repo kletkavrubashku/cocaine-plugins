@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.76) unstable; urgency=low
+
+  * feat: Metrics about choice of peers
+
+ -- Artem Selishchev <arselishev@gmail.com>  Thu, 30 Aug 2018 16:52:34 +0300
+
 cocaine-plugins (0.12.14.75) unstable; urgency=low
 
   * fix: Print weights of peers for 'vicodyn::apps' request
