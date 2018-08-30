@@ -8,6 +8,8 @@
 #include <cocaine/logging.hpp>
 #include <cocaine/rpc/session.hpp>
 #include <cocaine/rpc/upstream.hpp>
+#include <metrics/meter.hpp>
+#include <metrics/metric.hpp>
 #include <metrics/usts/ewma.hpp>
 
 #include <asio/ip/tcp.hpp>
@@ -40,6 +42,7 @@ public:
             schedule_reconnect(session);
             throw error_t(error::not_connected, "session is not connected");
         }
+        meter_->mark();
         d_.last_active = std::chrono::system_clock::now();
         auto stream = session->fork(std::move(dispatch));
         stream->send<Event>(std::forward<Args>(args)...);
@@ -72,6 +75,7 @@ private:
     asio::deadline_timer timer_;
     std::unique_ptr<logging::logger_t> logger_;
     synchronized<std::shared_ptr<cocaine::session_t>> session_;
+    const metrics::shared_metric<metrics::meter_t> meter_;
     bool connecting_{false};
 
     struct {

@@ -70,6 +70,7 @@ peer_t::peer_t(context_t& context, asio::io_service& loop, endpoints_t endpoints
     loop_(loop),
     timer_(loop),
     logger_(context.log(format("vicodyn_peer/{}", uuid))),
+    meter_(context.metrics_hub().meter(format("vicodyn.peers.{}.attempts", uuid))),
     d_{
         std::move(uuid),
         std::move(endpoints),
