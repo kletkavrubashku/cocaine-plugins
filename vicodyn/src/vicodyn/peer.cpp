@@ -348,8 +348,7 @@ auto peers_t::app_service_t::add_request_duration(std::chrono::nanoseconds elaps
 
 auto peers_t::app_service_t::avg_request_duration() const -> std::chrono::nanoseconds {
     // Ensure fading of request duration to zero by time
-    timings_ewma_->add(0);
-    return std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(timings_ewma_->get()));
+    return std::chrono::nanoseconds(static_cast<std::chrono::nanoseconds::rep>(timings_ewma_->calculate(0)));
 }
 
 auto peers_t::choose_random(const std::string& app_name, const peer_predicate_t& peer_predicate,
