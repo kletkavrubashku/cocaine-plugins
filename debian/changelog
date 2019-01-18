@@ -1,3 +1,9 @@
+cocaine-plugins (0.12.14.82) unstable; urgency=medium
+
+  * fix: Fix crash in plugin for graphite on stop
+
+ -- Artem Selishchev <arselishev@gmail.com>  Fri, 18 Jan 2019 16:51:28 +0300
+
 cocaine-plugins (0.12.14.81) unstable; urgency=medium
 
   * fix: Fix crash in vicodyn when proxy destructs earlier than dispatcher
