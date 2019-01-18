@@ -19,6 +19,7 @@
 #include "cocaine/idl/graphite.hpp"
 
 #include <cocaine/api/service.hpp>
+#include "cocaine/executor/asio.hpp"
 #include <cocaine/logging.hpp>
 #include <cocaine/rpc/dispatch.hpp>
 
@@ -65,11 +66,12 @@ private:
 
     void send();
     void reset_timer();
-    asio::io_service& asio;
     graphite_cfg_t config;
     std::shared_ptr<logging::logger_t> log;
-    synchronized<asio::deadline_timer> timer;
     synchronized<buffer_t> buffer;
+
+    executor::owning_asio_t executor;
+    synchronized<asio::deadline_timer> timer;
 };
 }}
 #endif

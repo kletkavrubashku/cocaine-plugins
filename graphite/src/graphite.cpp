@@ -42,7 +42,7 @@ graphite_t::graphite_sender_t::graphite_sender_t(graphite_t* _parent, graphite_t
     parent(_parent),
     buffer(std::move(_buffer)),
     s_buffer(),
-    socket(parent->asio)
+    socket(parent->executor.asio())
 {
 }
 
@@ -94,11 +94,10 @@ graphite_cfg_t::graphite_cfg_t(const cocaine::dynamic_t& args) :
 graphite_t::graphite_t(context_t& context, asio::io_service& _asio, const std::string& name, const dynamic_t& args) :
     service_t(context, _asio, name, args),
     dispatch<io::graphite_tag>(name),
-    asio(_asio),
     config(args),
     log(context.log("graphite")),
-    timer(asio),
-    buffer()
+    buffer(),
+    timer(executor.asio())
 {
     on<io::graphite::send_bulk>(std::bind(&graphite_t::on_send_bulk, this, ph::_1));
     on<io::graphite::send_one>(std::bind(&graphite_t::on_send_one, this, ph::_1));
